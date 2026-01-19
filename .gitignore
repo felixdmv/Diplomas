@@ -1,0 +1,10 @@
+*.pdf
+*.ipynb
+*.txt
+venv/
+__pycache__/
+*.pyc
+dist/
+build/
+*.spec
+*.exe
