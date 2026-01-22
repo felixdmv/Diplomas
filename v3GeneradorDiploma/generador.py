@@ -1,93 +1,195 @@
 import os
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.pdfgen import canvas
-from reportlab.lib.units import cm
+from reportlab.lib.units import cm, mm
 from reportlab.lib.utils import ImageReader
+from reportlab.lib.colors import HexColor, Color
 import pandas as pd
-from utils import texto_seguro, parse_calificacion, email_a_id, abrir_archivo
+from utils import texto_seguro, parse_calificacion, email_a_id, resource_path
+
+# --- CONFIGURACIÓN DE ESTILO ---
+COLOR_TEXTO_FIJO = HexColor("#555555")  # Gris elegante
+COLOR_DATOS = HexColor("#000000")       # Negro puro
+FUENTE_TITULO = "Helvetica-Bold"
+FUENTE_TEXTO = "Helvetica"
+
+def dibujar_fondo(c, width, height, logo_path):
+    """
+    Intenta cargar 'fondo.png' o 'fondo.jpg' desde la carpeta imgs.
+    Si no existe, dibuja un marco clásico elegante.
+    """
+    # Rutas posibles para el fondo
+    ruta_fondo_png = resource_path(os.path.join("imgs", "fondo.png"))
+    ruta_fondo_jpg = resource_path(os.path.join("imgs", "fondo.jpg"))
+    
+    fondo_usado = None
+    if os.path.exists(ruta_fondo_png):
+        fondo_usado = ruta_fondo_png
+    elif os.path.exists(ruta_fondo_jpg):
+        fondo_usado = ruta_fondo_jpg
+
+    if fondo_usado:
+        # OPCIÓN A: DIBUJAR IMAGEN DE FONDO (DISEÑO PRO)
+        try:
+            c.drawImage(fondo_usado, 0, 0, width=width, height=height)
+            # Si usas fondo, asumimos que el logo ya está en el diseño.
+            # Si quieres forzar el logo encima, descomenta las líneas de abajo.
+        except Exception as e:
+            print(f"Error cargando fondo: {e}")
+    else:
+        # OPCIÓN B: MARCO CLÁSICO GENERADO POR CÓDIGO (SI NO HAY IMAGEN)
+        # Marco doble elegante
+        c.setStrokeColor(HexColor("#333333"))
+        c.setLineWidth(3)
+        c.rect(1.5*cm, 1.5*cm, width-3*cm, height-3*cm) # Exterior
+        
+        c.setLineWidth(1)
+        c.rect(1.7*cm, 1.7*cm, width-3.4*cm, height-3.4*cm) # Interior
+
+        # Logo automático si no hay fondo
+        if logo_path and os.path.exists(logo_path):
+            try:
+                img = ImageReader(logo_path)
+                logo_width = 4.5*cm
+                iw, ih = img.getSize()
+                factor = logo_width / iw
+                logo_height = ih * factor
+                # Centrado arriba
+                c.drawImage(img, (width - logo_width)/2, height - 2.5*cm - logo_height, 
+                           width=logo_width, height=logo_height, mask='auto')
+            except:
+                pass
 
 def crear_pdf_individual(row, opciones, ruta_salida, logo_path):
     mostrar_horas, mostrar_calif, mostrar_extra = opciones
     
     c = canvas.Canvas(ruta_salida, pagesize=landscape(A4))
     width, height = landscape(A4)
+    centro_x = width / 2
 
-    # Marco
-    c.setLineWidth(3)
-    c.rect(2*cm, 2*cm, width-4*cm, height-4*cm)
+    # 1. DIBUJAR EL "LIENZO" (Fondo o Marco)
+    dibujar_fondo(c, width, height, logo_path)
 
-    # Logo
-    if logo_path and os.path.exists(logo_path):
-        try:
-            img = ImageReader(logo_path)
-            logo_width = 4*cm
-            iw, ih = img.getSize()
-            factor = logo_width / iw
-            logo_height = ih * factor
-            c.drawImage(img, 2.5*cm, height - 2.5*cm - logo_height, width=logo_width, height=logo_height, mask='auto')
-        except Exception:
-            pass
-
-    y = height - 8*cm
-
-    # Contenido
-    c.setFont("Times-Bold", 32)
-    c.drawCentredString(width/2, y, "DIPLOMA")
-
-    y -= 2*cm
-    c.setFont("Times-Roman", 16)
-    c.drawCentredString(width/2, y, "Se certifica que")
-
-    y -= 2*cm
-    c.setFont("Times-Bold", 26)
+    # 2. DEFINIR DATOS
     nombre_completo = " ".join([
         texto_seguro(row.get("nombre")),
         texto_seguro(row.get("apellido1")),
         texto_seguro(row.get("apellido2"))
-    ]).strip()
-    c.drawCentredString(width/2, y, nombre_completo)
+    ]).strip().upper() # Nombre en mayúsculas queda mejor
+    
+    curso = texto_seguro(row.get("curso_nombre"))
+    fecha = texto_seguro(row.get("fecha"))
 
-    y -= 2*cm
-    c.setFont("Times-Roman", 16)
-    c.drawCentredString(width/2, y, "ha superado el curso")
+    # --- COORDENADAS (AJUSTAR AQUÍ SI CAMBIAS EL DISEÑO) ---
+    # Empezamos más arriba para tener espacio
+    y_actual = height - 7.5*cm 
 
-    y -= 1.2*cm
-    c.setFont("Times-Bold", 18)
-    c.drawCentredString(width/2, y, texto_seguro(row.get("curso_nombre")))
+    # TÍTULO (Si tu fondo ya tiene la palabra DIPLOMA, comenta estas 2 líneas)
+    c.setFillColor(COLOR_TEXTO_FIJO)
+    c.setFont(FUENTE_TITULO, 36)
+    c.drawCentredString(centro_x, y_actual, "DIPLOMA DE CERTIFICACIÓN")
+    y_actual -= 2.0*cm
 
-    y -= 2*cm
-    c.setFont("Times-Roman", 14)
+    # "Se otorga a"
+    c.setFillColor(COLOR_TEXTO_FIJO)
+    c.setFont(FUENTE_TEXTO, 14)
+    c.drawCentredString(centro_x, y_actual, "Se otorga el presente reconocimiento a:")
+    y_actual -= 1.5*cm
 
+    # NOMBRE DEL ALUMNO (Destacado)
+    c.setFillColor(COLOR_DATOS)
+    c.setFont(FUENTE_TITULO, 26)
+    c.drawCentredString(centro_x, y_actual, nombre_completo)
+    y_actual -= 0.5*cm
+    
+    # Línea decorativa bajo el nombre
+    c.setStrokeColor(COLOR_TEXTO_FIJO)
+    c.setLineWidth(0.5)
+    c.line(centro_x - 6*cm, y_actual, centro_x + 6*cm, y_actual)
+    y_actual -= 1.5*cm
+
+    # "Por haber completado..."
+    c.setFillColor(COLOR_TEXTO_FIJO)
+    c.setFont(FUENTE_TEXTO, 14)
+    c.drawCentredString(centro_x, y_actual, "Por haber completado satisfactoriamente el curso:")
+    y_actual -= 1.2*cm
+
+    # NOMBRE DEL CURSO
+    c.setFillColor(COLOR_DATOS)
+    c.setFont(FUENTE_TITULO, 20)
+    c.drawCentredString(centro_x, y_actual, curso)
+    y_actual -= 1.5*cm
+
+    # --- BLOQUE DE DETALLES (Horas, Nota, Extra) ---
+    # Usaremos un tamaño de fuente menor para que no ocupe tanto
+    c.setFont(FUENTE_TEXTO, 12)
+    c.setFillColor(HexColor("#444444"))
+
+    detalles = []
     if mostrar_horas:
-        horas = texto_seguro(row.get("horas"))
-        if horas:
-            c.drawCentredString(width/2, y, f"Duración: {horas} horas")
-            y -= 1*cm
-
+        h = texto_seguro(row.get("horas"))
+        if h: detalles.append(f"Duración: {h} horas")
+    
     if mostrar_calif:
         calif = parse_calificacion(row.get("calificacion_num"))
         nota_txt = texto_seguro(row.get("calificacion_texto"))
-        if calif is not None:
-            c.drawCentredString(width/2, y, f"Calificación: {calif}")
-            y -= 1*cm
-        elif nota_txt:
-            c.drawCentredString(width/2, y, f"Resultado: {nota_txt}")
-            y -= 1*cm
+        if calif is not None: detalles.append(f"Calificación: {calif}")
+        elif nota_txt: detalles.append(f"Resultado: {nota_txt}")
 
     if mostrar_extra:
-        extra = texto_seguro(row.get("extra_1"))
-        if extra:
-            c.drawCentredString(width/2, y, extra)
-            y -= 1*cm
+        ext = texto_seguro(row.get("extra_1"))
+        if ext: detalles.append(ext)
 
-    # Fecha y Firma
-    c.setFont("Times-Roman", 12)
-    c.drawRightString(width - 3*cm, 3*cm, f"Fecha: {texto_seguro(row.get('fecha'))}")
-    c.line(width - 10*cm, 5*cm, width - 3*cm, 5*cm)
-    c.drawRightString(width - 3*cm, 4.3*cm, "Firma")
+    # Imprimir detalles centrados con separación pequeña
+    for detalle in detalles:
+        c.drawCentredString(centro_x, y_actual, detalle)
+        y_actual -= 0.6*cm  # Salto pequeño entre detalles
+
+    # --- PIE DE PÁGINA (FECHA Y FIRMA) ---
+    # Lo posicionamos fijo abajo, independiente de lo anterior para evitar solapamiento
+    pos_pie_y = 4*cm
+    
+    # Fecha (Izquierda o Centro, según prefieras. Aquí la pongo a la izquierda alineada)
+    c.setFont(FUENTE_TEXTO, 12)
+    c.drawString(3*cm, pos_pie_y, f"Fecha: {fecha}")
+
+    # Firma (Derecha)
+    c.line(width - 9*cm, pos_pie_y + 0.5*cm, width - 3*cm, pos_pie_y + 0.5*cm) # Línea firma
+    c.drawCentredString(width - 6*cm, pos_pie_y, "Firma del Responsable")
 
     c.showPage()
     c.save()
+
+def generar_preview(excel_path, opciones, logo_path, callback_log):
+    """Genera un único diploma basado en la primera fila del Excel y lo abre"""
+    # IMPORTACIÓN LOCAL PARA EVITAR CICLOS Y ASEGURAR UTILS
+    from utils import texto_seguro, abrir_archivo 
+    
+    try:
+        df = pd.read_excel(excel_path)
+        df.columns = [c.lower().strip() for c in df.columns]
+        
+        if df.empty:
+            callback_log("❌ El Excel está vacío.")
+            return
+
+        row_demo = None
+        for i, row in df.iterrows():
+            if texto_seguro(row.get("email")) and texto_seguro(row.get("nombre")):
+                row_demo = row
+                break
+        
+        if row_demo is None:
+            callback_log("❌ No se encontró ninguna fila válida para la preview.")
+            return
+
+        ruta_temp = "preview_diploma.pdf"
+        crear_pdf_individual(row_demo, opciones, ruta_temp, logo_path)
+        callback_log(f"👁️ Abriendo vista previa...")
+        abrir_archivo(ruta_temp)
+
+    except Exception as e:
+        callback_log(f"❌ Error preview: {e}")
 
 def procesar_excel_y_generar(excel_path, output_folder, opciones, logo_path, callback_log):
     if not os.path.exists(output_folder):
@@ -105,7 +207,6 @@ def procesar_excel_y_generar(excel_path, output_folder, opciones, logo_path, cal
         try:
             email = texto_seguro(row.get("email"))
             if not email or "@" not in email:
-                callback_log(f"[SKIP] Fila {i+2}: Email inválido")
                 errores += 1
                 continue
 
@@ -120,40 +221,4 @@ def procesar_excel_y_generar(excel_path, output_folder, opciones, logo_path, cal
             callback_log(f"[ERROR] Fila {i+2}: {e}")
             errores += 1
 
-    callback_log("-" * 30)
-    callback_log(f"FIN GENERACIÓN. OK: {generados} | Errores: {errores}")
-    
-
-def generar_preview(excel_path, opciones, logo_path, callback_log):
-    """Genera un único diploma basado en la primera fila del Excel y lo abre"""
-    try:
-        df = pd.read_excel(excel_path)
-        df.columns = [c.lower().strip() for c in df.columns]
-        
-        if df.empty:
-            callback_log("❌ El Excel está vacío.")
-            return
-
-        # Buscamos la primera fila que tenga datos mínimos
-        row_demo = None
-        for i, row in df.iterrows():
-            if texto_seguro(row.get("email")) and texto_seguro(row.get("nombre")):
-                row_demo = row
-                break
-        
-        if row_demo is None:
-            callback_log("❌ No se encontró ninguna fila válida (con email y nombre) en el Excel.")
-            return
-
-        ruta_temp = "preview_diploma.pdf"
-        
-        # Generamos el PDF
-        crear_pdf_individual(row_demo, opciones, ruta_temp, logo_path)
-        
-        callback_log(f"👁️ Vista previa generada: {ruta_temp}")
-        
-        # Abrimos el archivo automáticamente
-        abrir_archivo(ruta_temp)
-
-    except Exception as e:
-        callback_log(f"❌ Error en vista previa: {e}")
+    callback_log(f"FIN. Generados: {generados} | Errores: {errores}")
