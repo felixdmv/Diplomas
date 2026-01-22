@@ -6,6 +6,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.lib.colors import HexColor
 import pandas as pd
 from utils import texto_seguro, parse_calificacion, cargar_configuracion_plantilla, email_a_id, limpiar_nombre_curso
+import firmador
 
 # Valores por defecto por si el JSON está incompleto
 DEFAULT_FONT = "Helvetica"
@@ -161,7 +162,7 @@ def generar_preview(excel_path, opciones, logo_path, callback_log):
     except Exception as e:
         callback_log(f"❌ Error preview: {e}")
 
-def procesar_excel_y_generar(excel_path, output_folder, opciones, logo_path, callback_log):
+def procesar_excel_y_generar(excel_path, output_folder, opciones, logo_path, callback_log, datos_firma=None):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
@@ -196,7 +197,21 @@ def procesar_excel_y_generar(excel_path, output_folder, opciones, logo_path, cal
             ruta_completa = os.path.join(output_folder, filename)
 
             crear_pdf_individual(row, opciones, ruta_completa, logo_path)
+            msg_extra = ""
+            
+            # 2. FIRMAR EL PDF (Si toca)
+            if datos_firma:
+                ruta_pfx, pass_pfx = datos_firma
+                ok_firma = firmador.firmar_pdf(ruta_completa, ruta_pfx, pass_pfx)
+                if ok_firma:
+                    msg_extra = " [🔏 FIRMADO]"
+                else:
+                    msg_extra = " [❌ ERROR FIRMA]"
+                    # Opcional: Contar como error o dejarlo pasar sin firmar
+            
             generados += 1
+            # Añadimos feedback visual al log
+            callback_log(f"Generado: {filename}{msg_extra}") # Si quieres mucho detalle
             
         except Exception as e:
             callback_log(f"[ERROR] Fila {i+2}: {e}")

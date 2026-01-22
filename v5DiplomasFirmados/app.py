@@ -169,7 +169,36 @@ class AppUnificada:
         ttk.Checkbutton(f_opts, text="Incluir calificación / nota", variable=self.var_calif).grid(row=0, column=1, sticky="w", padx=10, pady=5)
         ttk.Checkbutton(f_opts, text="Incluir campo extra personalizado", variable=self.var_extra).grid(row=0, column=2, sticky="w", padx=10, pady=5)
 
-        ttk.Separator(frame, orient="horizontal").pack(fill=tk.X, pady=20)
+        ttk.Separator(frame, orient="horizontal").pack(fill=tk.X, pady=15)
+
+        # SECCIÓN FIRMA DIGITAL
+        f_firma = ttk.LabelFrame(frame, text=" 🔐 Firma Digital (Opcional) ", padding=10)
+        f_firma.pack(fill=tk.X, pady=5)
+
+        # Checkbox activar
+        self.var_firmar = tk.BooleanVar(value=False)
+        chk_firmar = ttk.Checkbutton(f_firma, text="Firmar digitalmente los PDFs (Requiere certificado .pfx)", 
+                                     variable=self.var_firmar, command=self.toggle_firma)
+        chk_firmar.pack(anchor="w")
+
+        # Contenedor para archivo y pass (se oculta/muestra según checkbox)
+        self.f_datos_firma = ttk.Frame(f_firma)
+        self.f_datos_firma.pack(fill=tk.X, pady=5)
+        
+        # Archivo PFX
+        ttk.Label(self.f_datos_firma, text="Certificado (.pfx / .p12):").pack(side=tk.LEFT)
+        self.ent_pfx = ttk.Entry(self.f_datos_firma, width=30)
+        self.ent_pfx.pack(side=tk.LEFT, padx=5)
+        ttk.Button(self.f_datos_firma, text="...", width=3, 
+                   command=lambda: self.sel_archivo(self.ent_pfx, [("Certificados", "*.pfx *.p12")])).pack(side=tk.LEFT)
+
+        # Contraseña
+        ttk.Label(self.f_datos_firma, text="Contraseña:").pack(side=tk.LEFT, padx=(15, 0))
+        self.ent_pass = ttk.Entry(self.f_datos_firma, show="*", width=15) # show="*" oculta caracteres
+        self.ent_pass.pack(side=tk.LEFT, padx=5)
+
+        # Estado inicial (desactivado)
+        self.toggle_firma()
 
         # Sección 3: Botones de Acción
         f_btns = ttk.Frame(frame, style="White.TFrame")
@@ -267,22 +296,30 @@ class AppUnificada:
             messagebox.showwarning("Atención", "Selecciona primero el archivo Excel.")
             return
         
-        # LÓGICA NUEVA:
-        # 1. Obtenemos la carpeta donde está el Excel
         carpeta_excel = os.path.dirname(excel_path)
-        
-        # 2. Creamos una subcarpeta ahí llamada "Diplomas_Generados"
-        # Así no mezclamos los PDFs con el Excel y queda ordenado.
         out_folder = os.path.join(carpeta_excel, "Diplomas_Generados")
         
         opts = (self.var_horas.get(), self.var_calif.get(), self.var_extra.get())
         
-        # Lanzamos el hilo con la nueva ruta
-        threading.Thread(target=self._hilo_gen, args=(excel_path, out_folder, opts)).start()
+        # DATOS DE FIRMA
+        datos_firma = None
+        if self.var_firmar.get():
+            pfx = self.ent_pfx.get()
+            pwd = self.ent_pass.get()
+            if not pfx or not os.path.exists(pfx):
+                messagebox.showerror("Error Firma", "Selecciona un archivo .pfx válido.")
+                return
+            if not pwd:
+                messagebox.showerror("Error Firma", "Introduce la contraseña del certificado.")
+                return
+            datos_firma = (pfx, pwd) # Tupla con ruta y pass
+        
+        # Pasamos datos_firma al hilo
+        threading.Thread(target=self._hilo_gen, args=(excel_path, out_folder, opts, datos_firma)).start()
 
-    def _hilo_gen(self, excel, out, opts):
+    def _hilo_gen(self, excel, out, opts, datos_firma=None):
         # Llamamos al generador (él creará la carpeta si no existe)
-        generador.procesar_excel_y_generar(excel, out, opts, self.logo_path, self.log)
+        generador.procesar_excel_y_generar(excel, out, opts, self.logo_path, self.log, datos_firma)
         
         # AVISO AL USUARIO
         # Le mostramos la ruta y, para ser más amables, abrimos la carpeta automáticamente.
@@ -310,6 +347,22 @@ class AppUnificada:
             messagebox.showinfo("Fin", "Envío completado")
         else:
             self.log("Fin de la prueba. Revisa la carpeta Borradores de Outlook.")
+            
+    # AÑADIR ESTA FUNCIÓN A LA CLASE
+    def toggle_firma(self):
+        if self.var_firmar.get():
+            for child in self.f_datos_firma.winfo_children():
+                child.configure(state='normal')
+        else:
+            for child in self.f_datos_firma.winfo_children():
+                child.configure(state='disabled')
+
+    # AÑADIR MODIFICACIÓN EN sel_archivo PARA ACEPTAR FILTROS
+    def sel_archivo(self, entry, tipos=[("Excel", "*.xlsx")]):
+        p = filedialog.askopenfilename(filetypes=tipos)
+        if p:
+            entry.delete(0, tk.END)
+            entry.insert(0, p)
 
 if __name__ == "__main__":
     # --- TRUCO PARA EL ICONO EN LA BARRA DE TAREAS DE WINDOWS ---
