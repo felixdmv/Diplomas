@@ -1,0 +1,136 @@
+import os
+import pandas as pd
+import win32com.client as win32
+import pythoncom  # Necesario para multihilo con COM
+from utils import email_a_id, buscar_pdf_correcto, limpiar_nombre_curso
+
+NOMBRE_VISIBLE_PDF = "DiplomaBiblioteca.pdf"
+
+def enviar_masivo_outlook(excel_path, pdf_folder, dry_run, callback_log):
+    """
+    Lógica original usando Outlook de escritorio (Classic).
+    dry_run = True -> mail.Display() (abre la ventana)
+    dry_run = False -> mail.Send() (envía directo)
+    """
+    
+    # IMPORTANTE: Inicializar COM en este hilo
+    pythoncom.CoInitialize()
+
+    try:
+        if not os.path.exists(excel_path):
+            callback_log("❌ Error: No se encuentra el Excel.")
+            return
+
+        df = pd.read_excel(excel_path)
+        df.columns = [c.lower().strip() for c in df.columns]
+
+        # Verificar columnas
+        if "email" not in df.columns:
+            callback_log("❌ Error: El Excel no tiene columna 'email'.")
+            return
+
+        try:
+            outlook = win32.Dispatch("Outlook.Application")
+            callback_log("✅ Conectado a Outlook local.")
+        except Exception as e:
+            callback_log(f"❌ Error al conectar con Outlook: {e}")
+            callback_log("Asegúrate de tener el Outlook 'Clásico' abierto.")
+            return
+
+        enviados = 0
+        errores = 0
+        
+        callback_log(f"Iniciando proceso... (Modo Prueba: {dry_run})")
+
+        for idx, row in df.iterrows():
+            try:
+                email = str(row["email"]).strip()
+                nombre = str(row.get("nombre", "")).strip()
+
+                if "@" not in email:
+                    callback_log(f"[SKIP] Fila {idx+2}: Email inválido ({email})")
+                    errores += 1
+                    continue
+
+                email_id = email_a_id(email)
+            
+                # NUEVO: Obtenemos el ID del curso también
+                curso_raw = str(row.get("curso_nombre", "")).strip()
+                curso_id = limpiar_nombre_curso(curso_raw).lower() # Lo pasamos a minúsculas para buscar
+
+                # NUEVO: Usamos la búsqueda específica
+                pdf_path = buscar_pdf_especifico(pdf_folder, email_id, curso_id)
+
+                if not pdf_path:
+                    # Intento de fallback: Si no encuentra el curso específico, avisar del error
+                    # NO enviamos uno genérico para evitar errores cruzados (enviar diploma de cocina al de mecanica)
+                    callback_log(f"⚠️ [ERROR] No encuentro PDF para: {email} del curso '{curso_raw}'")
+                    errores += 1
+                    continue
+
+                # Crear correo
+                mail = outlook.CreateItem(0)
+                mail.To = email
+                mail.Subject = "Tu diploma del curso"
+                
+                mail.HTMLBody = f"""
+                <p>Hola {nombre},</p>
+                <p>Adjunto te enviamos tu diploma firmado en formato PDF.</p>
+                <p>Un saludo.</p>
+                """
+
+                # Adjuntar y renombrar visualmente
+                adjunto = mail.Attachments.Add(pdf_path)
+                try:
+                    adjunto.DisplayName = NOMBRE_VISIBLE_PDF
+                except:
+                    pass # A veces falla renombrar, no es crítico
+
+                if dry_run:
+                    callback_log(f"🔭 [PRUEBA] Abriendo borrador para {email}...")
+                    mail.Display() # Abre la ventana de Outlook
+                else:
+                    mail.Send()
+                    callback_log(f"🚀 [ENVIADO] {email}")
+                    enviados += 1
+
+            except Exception as e:
+                callback_log(f"[ERROR] Fila {idx+2}: {e}")
+                errores += 1
+
+        callback_log("-" * 30)
+        callback_log(f"FIN PROCESO. Enviados: {enviados} | Errores: {errores}")
+
+    finally:
+        # Liberar recursos COM
+        pythoncom.CoUninitialize()
+        
+def buscar_pdf_especifico(carpeta, email_id, curso_id):
+    """
+    Busca un archivo que contenga TANTO el email_id COMO el curso_id.
+    Ejemplo busca: juan_perez + Curso_Python
+    Archivo real: juan_perez__Curso_Python.pdf
+    """
+    if not os.path.exists(carpeta):
+        return None
+
+    candidatos = []
+    
+    for f in os.listdir(carpeta):
+        if not f.lower().endswith(".pdf"):
+            continue
+            
+        # El archivo debe contener AMBAS partes
+        # Usamos lower() para evitar problemas de mayúsculas/minúsculas
+        nombre_archivo = f.lower()
+        
+        if email_id in nombre_archivo and curso_id in nombre_archivo:
+            ruta = os.path.join(carpeta, f)
+            candidatos.append(ruta)
+
+    if not candidatos:
+        return None
+
+    # Si por algún motivo hay duplicados, cogemos el más reciente
+    candidatos.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+    return candidatos[0]
