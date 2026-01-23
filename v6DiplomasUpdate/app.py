@@ -70,6 +70,8 @@ class AppUnificada:
         self.txt_log = scrolledtext.ScrolledText(main_frame, height=8, state='disabled', 
                                                  font=("Consolas", 9), bg="#FFFFFF", fg="#333333", borderwidth=1, relief="solid")
         self.txt_log.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        
+        threading.Thread(target=self.check_for_updates, daemon=True).start()
 
     def configurar_estilos(self):
         style = ttk.Style()
@@ -366,6 +368,31 @@ class AppUnificada:
         if p:
             entry.delete(0, tk.END)
             entry.insert(0, p)
+    
+    def check_for_updates(self):
+        try:
+            # --- CONFIGURA ESTO ---
+            # Reemplaza 'tu_usuario/tu_repositorio' por los tuyos
+            repo = "felixdmv/generador-diplomas" 
+
+            url = f"https://api.github.com/repos/{repo}/releases/latest"
+            response = requests.get(url, timeout=5)
+
+            if response.status_code == 200:
+                latest_version_str = response.json()["tag_name"].replace("v", "")
+
+                # Comparamos versiones de forma segura (ej: "1.2.0" > "1.10.0" es falso)
+                if parse(latest_version_str) > parse(__version__):
+                    if messagebox.askyesno("Actualización Disponible", 
+                                           f"¡Hay una nueva versión ({latest_version_str}) disponible!\n"
+                                        f"La tuya es la {__version__}.\n\n"
+                                        "¿Quieres ir a la página de descargas para instalarla?"):
+                    
+                        download_url = response.json()["html_url"]
+                        webbrowser.open(download_url)
+        except Exception as e:
+            # Si falla (no hay internet, etc), no molestamos al usuario.
+            print(f"Error al buscar actualizaciones: {e}")
 
 if __name__ == "__main__":
     # --- TRUCO PARA EL ICONO EN LA BARRA DE TAREAS DE WINDOWS ---
