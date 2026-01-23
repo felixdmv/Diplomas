@@ -3,11 +3,14 @@ from tkinter import ttk, filedialog, messagebox, scrolledtext
 import os
 import threading
 from PIL import Image, ImageTk  # Necesario: pip install Pillow
-
-# Módulos propios
+import requests
+import webbrowser
+from packaging.version import parse
 from utils import resource_path
 import generador
 import mailer
+
+__version__ = "1.0.0" # <-- AÑADIR ESTA LÍNEA
 
 # --- CONFIGURACIÓN DE COLORES Y ESTILO ---
 COLOR_FONDO = "#F4F6F9"       # Gris muy clarito (moderno)
