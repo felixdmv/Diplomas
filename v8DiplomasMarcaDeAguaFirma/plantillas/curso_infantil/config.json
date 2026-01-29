@@ -1,0 +1,46 @@
+{
+    "orientacion": "landscape",
+    "elementos": {
+        "nombre_alumno": {
+            "x_mm": 148.5,
+            "y_mm": 110,
+            "tamano": 28,
+            "alineacion": "center",
+            "fuente": "Helvetica-Bold",
+            "color": "#000000"
+        },
+        "nombre_curso": {
+            "x_mm": 148.5,
+            "y_mm": 85,
+            "tamano": 22,
+            "alineacion": "center",
+            "fuente": "Helvetica-Bold",
+            "color": "#FF4500"
+        },
+        "fecha": {
+            "x_mm": 40,
+            "y_mm": 35,
+            "tamano": 12,
+            "alineacion": "left",
+            "fuente": "Helvetica",
+            "color": "#555555"
+        },
+        "firma": {
+            "x_mm": 230,
+            "y_mm": 35,
+            "tamano": 12,
+            "alineacion": "center",
+            "fuente": "Helvetica",
+            "color": "#555555"
+        },
+        "detalles": {
+            "x_mm": 148.5,
+            "y_mm": 60,
+            "tamano": 12,
+            "alineacion": "center",
+            "fuente": "Helvetica",
+            "color": "#333333",
+            "interlineado": 5
+        }
+    }
+}
